@@ -14,32 +14,71 @@ public class SeamCarving
 	public static void main(String[] args) 
 	{
 		BufferedImage img = null;
+		int k = 50;
 		try 
 		{
-		    img = ImageIO.read(new File("strawberry.jpg"));
-		    int k = 50;
+		    img = ImageIO.read(new File("cats.jpg"));
 		    
 		    WritableRaster rast = img.getRaster();
 		    int rows = rast.getHeight();
 		    int cols = rast.getWidth();
 		    int[][] pixels = new int[rows][cols];
-		    for( int i = 0; i < rows; i++ )
-		        for( int j = 0; j < cols; j++ )
-		            pixels[i][j] = img.getRGB( i, j );
 		    
-		    int[][] energyMap = SeamCarving.energyFunction1(rows, cols, pixels);
-		    int[][] dynProgResult = dynamicProgrammingSumEnergy(rows, cols, energyMap, STRAIGHT); 
+		    imageTo2DPixelsArray(img, rows, cols, pixels);
 		    
-		    Seam[] seams = new Seam[k];
+		    while (k > 0)
+		    {
+		    	int[][] energyMap = SeamCarving.energyFunction1(rows, cols, pixels);
+			    int[][] dynProgResult = dynamicProgrammingSumEnergy(rows, cols, energyMap, STRAIGHT); 
+
+			    Seam s = new Seam(rows);
+			    s.form(dynProgResult, STRAIGHT);
+			    
+			    int[][] carveOutSeamPixels = carveOutSeam(pixels, rows, cols - 1, s);
+			    pixels = carveOutSeamPixels;
+			    k--;
+			    cols--;
+		    }
 		    
-		    //select k lowest seams...
+		    BufferedImage resultImage = null;
+		    resultImage = new BufferedImage(cols, rows, BufferedImage.TYPE_INT_RGB);
+		    for (int i = 0; i < rows; i++)
+		    {
+		    	for (int j = 0; j < cols; j++)
+		    	{
+		    		resultImage.setRGB(j, i, pixels[i][j]);		    		
+		    	}
+		    }
+		    
+		    ImageIO.write(resultImage, "jpg", new File("catsresult.jpg"));
+
+		    System.out.println("Height = " + img.getHeight() + " Width = " + img.getWidth());
 		} 
 		catch (IOException e) 
 		{
-			
+			System.out.println("Caught exception" + e.toString());
 		}
 		
-		System.out.println("Height = " + img.getHeight() + " Width = " + img.getWidth());
+		
+	}
+
+	private static int[][] carveOutSeam(int[][] pixels, int numOfRows, int newNumOfCols, Seam s) 
+	{
+		int[][] newPixels = new int[numOfRows][newNumOfCols];
+		for (int row = 0; row < numOfRows; row++)
+		{
+			int skipIndex = s.cols[row];
+			System.arraycopy(pixels[row], 0, newPixels[row], 0, skipIndex);
+			System.arraycopy(pixels[row], skipIndex + 1, newPixels[row], skipIndex, newNumOfCols - skipIndex);
+		}
+		return newPixels;
+	}
+
+	private static void imageTo2DPixelsArray(BufferedImage img, int rows, int cols, int[][] pixels) 
+	{
+		for( int i = 0; i < rows; i++ )
+		    for( int j = 0; j < cols; j++ )
+		        pixels[i][j] = img.getRGB( j, i );
 	}
 
 	private static int[][] dynamicProgrammingSumEnergy(int rows, int cols, int[][] energyMap, int mode)
@@ -86,7 +125,8 @@ public class SeamCarving
 	}
 
 	private static void dynamicProgrammingStep(int[][] energyMap, int[][] dynProgResult, boolean[] lookAt, int i,
-			int j) {
+			int j) 
+	{
 		int minimalValueFound = Integer.MAX_VALUE;
 		for (int k = 0; k < 3; k++)
 		{

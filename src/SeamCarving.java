@@ -17,7 +17,9 @@ public class SeamCarving
 		int k = 50;
 		try 
 		{
-		    img = ImageIO.read(new File("cats.jpg"));
+			//img = ImageIO.read(new File("strawberry.jpg"));
+			img = ImageIO.read(new File("cats.jpg"));
+			//img = ImageIO.read(new File("halong_bay.jpg"));
 		    
 		    WritableRaster rast = img.getRaster();
 		    int rows = rast.getHeight();
@@ -25,7 +27,7 @@ public class SeamCarving
 		    int[][] pixels = new int[rows][cols];
 		    
 		    imageTo2DPixelsArray(img, rows, cols, pixels);
-		    
+		    int[][] pixelsSeams = pixels;//for DEBUG only
 		    while (k > 0)
 		    {
 		    	int[][] energyMap = SeamCarving.energyFunction1(rows, cols, pixels);
@@ -36,21 +38,44 @@ public class SeamCarving
 			    
 			    int[][] carveOutSeamPixels = carveOutSeam(pixels, rows, cols - 1, s);
 			    pixels = carveOutSeamPixels;
+
+				pixelsSeams = paintSeam(pixelsSeams, rows, s);//for DEBUG only
+
 			    k--;
 			    cols--;
 		    }
-		    
+
+			//Original image with selected seams - for DEBUG only
+			BufferedImage seamImage = null;
+			int origRows = rast.getHeight();
+			int origCols = rast.getWidth();
+			seamImage = new BufferedImage(origCols, origRows, BufferedImage.TYPE_INT_RGB);
+			for (int i = 0; i < origRows; i++)
+			{
+				for (int j = 0; j < origCols; j++)
+				{
+					seamImage.setRGB(j, i, pixelsSeams[i][j]);
+				}
+			}
+
+			//ImageIO.write(seamImage, "jpg", new File("strawberry_seams_result.jpg"));
+			ImageIO.write(seamImage, "jpg", new File("cats_seams_result.jpg"));
+			//ImageIO.write(seamImage, "jpg", new File("halong_bay_seams_result.jpg"));
+
+		    //Result image
 		    BufferedImage resultImage = null;
 		    resultImage = new BufferedImage(cols, rows, BufferedImage.TYPE_INT_RGB);
 		    for (int i = 0; i < rows; i++)
 		    {
 		    	for (int j = 0; j < cols; j++)
 		    	{
-		    		resultImage.setRGB(j, i, pixels[i][j]);		    		
+		    		resultImage.setRGB(j, i, pixels[i][j]);
 		    	}
 		    }
-		    
-		    ImageIO.write(resultImage, "jpg", new File("catsresult.jpg"));
+
+			//ImageIO.write(resultImage, "jpg", new File("strawberry_result.jpg"));
+			ImageIO.write(resultImage, "jpg", new File("cats_result.jpg"));
+		    //ImageIO.write(resultImage, "jpg", new File("halong_bay_result.jpg"));
 
 		    System.out.println("Height = " + img.getHeight() + " Width = " + img.getWidth());
 		} 
@@ -72,6 +97,15 @@ public class SeamCarving
 			System.arraycopy(pixels[row], skipIndex + 1, newPixels[row], skipIndex, newNumOfCols - skipIndex);
 		}
 		return newPixels;
+	}
+
+	private static int[][] paintSeam(int[][]pixelsSeams, int numOfRows, Seam s)//for DEBUG only
+	{
+		for (int row = 0; row < numOfRows; row++)
+		{
+			pixelsSeams[row][s.cols[row]] = 0;
+		}
+		return pixelsSeams;
 	}
 
 	private static void imageTo2DPixelsArray(BufferedImage img, int rows, int cols, int[][] pixels) 
@@ -148,6 +182,8 @@ public class SeamCarving
 	private static int ColorsGradient(int i, int j, int rows, int cols, int[][] pixels) 
 	{
 		int gradient = 0;
+		int neighbors = 0;
+
 		int ii = - 1, jj = -1, iimax = 2,  jjmax = 2;
 		if ( i == 0 || i == rows - 1 || j == 0 || j == cols - 1)
 		{
@@ -156,7 +192,7 @@ public class SeamCarving
 			if (i == 0)
 				ii = 0;
 			else if (i == rows - 1)
-				iimax = 0;
+				iimax = 1;
 			
 			if (j == 0)
 				jj = 0;
@@ -177,15 +213,17 @@ public class SeamCarving
 			{
 				if (ii==0 && jj==0)
 					continue;
-				
+
+				neighbors++;
+
 				n = new Color(pixels[i+ii][j+jj]);
-				delta_red = red - n.getRed();
-				delta_green = green - n.getGreen();
-				delta_blue = blue - n.getBlue();
+				delta_red = Math.abs(red - n.getRed());
+				delta_green = Math.abs(green - n.getGreen());
+				delta_blue = Math.abs(blue - n.getBlue());
 				
-				gradient += (delta_red + delta_green + delta_blue);
+				gradient += ((delta_red + delta_green + delta_blue) / 3);
 			}
 		}
-		return gradient;
+		return (gradient/neighbors);
 	}
 }

@@ -48,7 +48,7 @@ public class Seam
 			if(i == 0)
 				break;
 			
-			if (currCol == 0 || currCol == cols -1 && mode == SeamCarving.SEAM) //edge case
+			if ((currCol == 0 || currCol == cols -1) && (mode == SeamCarving.SEAM)) //edge case
 			{
 				if (currCol == 0)
 				{

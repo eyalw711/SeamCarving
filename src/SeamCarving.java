@@ -19,12 +19,22 @@ public class SeamCarving
 	public static void main(String[] args) 
 	{
 		//Get input command line arguments
-		//TODO: get following variables from Command line arguments
-		int outCols = 500;//600 is the width of source cats.jpg
-		int outRows = 266;//366 is the height of source cats.jpg
-		String inputImageFilename = "cats.jpg";// "halong_bay.jpg" "strawberry.jpg"
-		String outputImageFilename = "cats_result_new.jpg";
-		int energyType = ENERGY_REGULAR;
+        int outCols;//600 is the width of source cats.jpg
+        int outRows;//366 is the height of source cats.jpg
+        String inputImageFilename;// = "cats.jpg" "halong_bay.jpg" "strawberry.jpg"
+        String outputImageFilename;// = "cats_result.jpg" "halong_bay_result.jpg" "strawberry_result.jpg"
+        int energyType;// = ENERGY_REGULAR;
+
+        if (args.length != 5){
+            System.out.println("ERROR: got " + args.length + " arguments while expecting 5 arguments. exting...");
+            return;
+        }else{
+            inputImageFilename=args[0];
+            outCols=Integer.parseInt(args[1]);
+            outRows=Integer.parseInt(args[2]);
+            energyType=Integer.parseInt(args[3]);
+            outputImageFilename=args[4];
+        }
 
 		try 
 		{
@@ -111,9 +121,9 @@ public class SeamCarving
 		while (absDelta > 0)
 		{
 			//Calculate energy map & dynamic programming results
-			int[][] energyMap = (mode == ENERGY_FORWARD) ?
+			int[][] energyMap = (energyType == ENERGY_FORWARD) ?
 									SeamCarving.energyFunctionFor(rows, cols, workPixels) :
-									(mode == ENERGY_ENTROPY) ?
+									(energyType == ENERGY_ENTROPY) ?
 											SeamCarving.energyFunctionEnt(rows, cols, workPixels) :
 											SeamCarving.energyFunctionReg(rows, cols, workPixels);
 

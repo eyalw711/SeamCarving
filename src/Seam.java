@@ -22,7 +22,7 @@ public class Seam
 		int cols = dynProgResult[0].length;
 		
 		boolean[] lookAt = new boolean[3];
-		if (mode == SeamCarving.STRAIGHT)
+		if (mode == SeamCarving.VERTICAL)
 		{
 			lookAt[0] = false;
 			lookAt[1] = true;
@@ -48,7 +48,7 @@ public class Seam
 			if(i == 0)
 				break;
 			
-			if ((currCol == 0 || currCol == cols -1) && (mode == SeamCarving.SEAM)) //edge case
+			if ((currCol == 0 || currCol == cols -1) && (mode == SeamCarving.VERTICAL_SEAM)) //edge case
 			{
 				if (currCol == 0)
 				{

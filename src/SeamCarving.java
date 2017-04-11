@@ -16,6 +16,14 @@ public class SeamCarving
 	static final int ENERGY_ENTROPY = 1;
 	static final int ENERGY_FORWARD = 2;
 
+	/*TODO: consider code modifications in order to make it more efficient.
+	* NOW: running on cats.jpg (600*366pixels) with regular energy function (changing 1 dimension) takes about 5-10 seconds, BUT
+	*                                          with entropy energy function (for every pixel goes through a 9*9 pixels square) -
+	*                                           takes about 1.5-2 MINUTES.
+	*NOW: running on halong_bay.jpg (846*566pixels) with regular energy function(changing 2 dimensions) takes about 10-15 seconds, BUT
+	*                                               with entropy energy function (for every pixel goes through a 9*9 pixels square) -
+	*                                           takes about 12 MINUTES.
+	*/
 	public static void main(String[] args) 
 	{
 		//Get input command line arguments
@@ -117,7 +125,7 @@ public class SeamCarving
 		//Set absolute delta and carveIn/carveOut boolean variable
 		int absDelta = Math.abs(delta);
 		boolean is_in = (delta < 0);
-
+        //TODO: in case of enlarging the image - need to first find all "delta" min seams, and only then add them.
 		while (absDelta > 0)
 		{
 			//Calculate energy map & dynamic programming results
@@ -172,11 +180,21 @@ public class SeamCarving
 
 	private static int[][] energyFunctionEnt(int rows, int cols, int[][] pixels)
 	{
-		//TODO: IMPLEMENT. right now - same as energyFunctionReg.
+        int entropy;
+        int gradient;
+        double entWeight = 0.5; //value between 0 to 1. TODO: decide on entropy weight according to experiments
+        double gradWeight = 1 - entWeight;
 		int[][] energyMap = new int[rows][cols];
-		for( int i = 0; i < rows; i++ )
-			for( int j = 0; j < cols; j++ )
-				energyMap[i][j] = ColorsGradient(i, j, rows, cols, pixels);
+
+		for( int i = 0; i < rows; i++ ){
+            for( int j = 0; j < cols; j++ ){
+                gradient = ColorsGradient(i, j, rows, cols, pixels);
+                entropy = entropyCalc(i, j, rows, cols, pixels);
+                energyMap[i][j] = (int)(gradient*gradWeight + entropy*entWeight);
+            }
+        }
+
+
 		return energyMap;
 	}
 
@@ -236,6 +254,52 @@ public class SeamCarving
 		}
 		return (gradient/neighbors);
 	}
+
+    private static int entropyCalc(int i, int j, int rows, int cols, int[][] pixels)
+    {
+        //Set iterations bounds
+        int mStart = i-4;
+        int mEnd = i+4 + 1;
+        int nStart= j-4;
+        int nEnd = j+4 + 1;
+
+        //Avoid out of range bounds
+        if (mStart < 0)  mStart=0;
+        if (mEnd > rows) mEnd=rows;
+        if (nStart < 0)  nStart=0;
+        if (nEnd > cols) nEnd=cols;
+
+        //Help variables
+        int acc = 0;
+        int denomAcc = 0;
+        int Pmn;
+
+        //Calculate Pmn denominator (same for all Pmn)
+        for (int m = mStart ; m<mEnd ; m++){
+            for (int n = nStart ; n < nEnd ; n++){
+                denomAcc += calcFmn(pixels[m][n]);
+            }
+        }
+
+        //Calculate Hi for pixel (i,j) (up to '-' sign)
+        for (int m = mStart ; m<mEnd ; m++){
+            for (int n = nStart ; n < nEnd ; n++){
+                Pmn = calcFmn(pixels[m][n]) / denomAcc;
+                acc += Pmn*Math.log(Pmn);
+            }
+        }
+        return (-acc);
+    }
+
+    private static int calcFmn(int pixelValue)
+    {
+        Color c = new Color(pixelValue);
+        int red = c.getRed();
+        int green = c.getGreen();
+        int blue = c.getBlue();
+
+        return ((c.getRed() + c.getGreen() + c.getBlue()) / 3);
+    }
 
 	private static int[][] dynamicProgrammingSumEnergy(int rows, int cols, int[][] energyMap, int mode)
 	{
@@ -307,7 +371,40 @@ public class SeamCarving
 	private static int[][] carveInSeam(int[][] pixels, int numOfRows, int newNumOfCols, Seam s)
 	{
 		int[][] newPixels = new int[numOfRows][newNumOfCols];
-		//TODO: IMPLEMENT
+
+        Color cLeft;
+        Color cRight;
+
+        int red;
+        int green;
+        int blue;
+        int rgb;
+
+        for (int row = 0; row < numOfRows; row++)
+        {
+            int dupIndex = s.cols[row];
+            System.arraycopy(pixels[row], 0, newPixels[row], 0, dupIndex+1);
+
+            if (dupIndex != (newNumOfCols-2)){ //TODO: is this the right way for interpulation with neighbors?
+                //Set new pixel as average of its left & right neighbors;
+                cLeft= new Color(pixels[row][dupIndex]);
+                cRight=new Color(pixels[row][dupIndex+1]);
+
+                red =   (cLeft.getRed()     + cRight.getRed()   ) / 2;
+                green = (cLeft.getGreen()   + cRight.getGreen() ) / 2;
+                blue =  (cLeft.getBlue()    + cRight.getBlue()  ) / 2;
+
+                rgb = red;
+                rgb = (rgb << 8) + green;
+                rgb = (rgb << 8) + blue;
+
+                newPixels[row][dupIndex+1] = rgb;
+            }else{
+                newPixels[row][dupIndex+1] = pixels[row][dupIndex];
+            }
+
+            System.arraycopy(pixels[row], dupIndex + 1, newPixels[row], dupIndex+2, newNumOfCols - (dupIndex+2));
+        }
 		return newPixels;
 	}
 

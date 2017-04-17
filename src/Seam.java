@@ -3,17 +3,23 @@ public class Seam
 {
 	public int[] cols;
 	public int rows;
+	public int min;
+	public int max;
 	
 	Seam(int rows)
 	{
 		this.rows = rows;
 		this.cols = new int[rows];
+		this.min = Integer.MAX_VALUE;
+		this.max = -1;
 	}
 	
 	Seam(int[] cols, int rows)
 	{
 		this.cols = cols;
 		this.rows = rows;
+		this.min = Integer.MAX_VALUE;
+		this.max = -1;
 	}
 
 	public void form(int[][] dynProgResult, int mode) 
@@ -35,7 +41,9 @@ public class Seam
 		
 		//look at lowest row to find correct seam:
 		int minimalIndexFound = lowestRowMinimalValueIndex(dynProgResult, rows, cols);
-		
+		this.min = minimalIndexFound;
+		this.max = minimalIndexFound;
+
 		//int currRow = rows - 1;
 		int currCol = minimalIndexFound;
 		
@@ -43,6 +51,8 @@ public class Seam
 		{
 			//put at seam
 			this.cols[i] = currCol;
+			if (currCol < this.min) this.min = currCol;
+			if (currCol > this.max) this.max = currCol;
 			
 			//find next col:
 			if(i == 0)

@@ -16,16 +16,11 @@ public class SeamCarving
 	static final int ENERGY_ENTROPY = 1;
 	static final int ENERGY_FORWARD = 2;
 
-	/*TODO: consider code modifications in order to make it more efficient.
-	* NOW: running on cats.jpg (600*366pixels) with regular energy function (changing 1 dimension) takes about 5-10 seconds, BUT
-	*                                          with entropy energy function (for every pixel goes through a 9*9 pixels square) -
-	*                                           takes about 1.5-2 MINUTES.
-	*NOW: running on halong_bay.jpg (846*566pixels) with regular energy function(changing 2 dimensions) takes about 10-15 seconds, BUT
-	*                                               with entropy energy function (for every pixel goes through a 9*9 pixels square) -
-	*                                           takes about 12 MINUTES.
-	*/
 	public static void main(String[] args) 
 	{
+		//Get start time (for running time measurement)
+		long startTime = System.currentTimeMillis();
+
 		//Get input command line arguments
         int outCols;//600 is the width of source cats.jpg
         int outRows;//366 is the height of source cats.jpg
@@ -87,6 +82,11 @@ public class SeamCarving
 		{
 			System.out.println("Caught exception" + e.toString());
 		}
+
+		//Print running time message
+		long endTime   = System.currentTimeMillis();
+		long totalTime = endTime - startTime;
+		System.out.println("running time = " + totalTime/1000 + " seconds");
 	}
 
 	private static void imageTo2DPixelsArray(BufferedImage img, int rows, int cols, int[][] pixels) 
@@ -98,9 +98,9 @@ public class SeamCarving
 
 	private static int[][] removeOrAddSeams(int rows, int cols, int delta, int[][] pixels, int mode, int energyType)
 	{
+		//Transpose matrix if needed
 		int[][] pixelsTrans = new int[cols][rows];
 		boolean transpose = false;
-		//Transpose matrix if needed
 		if (mode == HORIZONTAL || mode == HORIZONTAL_SEAM){
 			//Set transposed matrix
 			for (int i = 0 ; i < rows ; i++){
@@ -123,35 +123,91 @@ public class SeamCarving
 		int[][] workPixels = (transpose) ? pixelsTrans : pixels;
 
 		//Set absolute delta and carveIn/carveOut boolean variable
-		int absDelta = Math.abs(delta);
-		boolean is_in = (delta < 0);
-        //TODO: in case of enlarging the image - need to first find all "delta" min seams, and only then add them.
-		while (absDelta > 0)
-		{
-			//Calculate energy map & dynamic programming results
-			int[][] energyMap = (energyType == ENERGY_FORWARD) ?
-									SeamCarving.energyFunctionFor(rows, cols, workPixels) :
-									(energyType == ENERGY_ENTROPY) ?
-											SeamCarving.energyFunctionEnt(rows, cols, workPixels) :
-											SeamCarving.energyFunctionReg(rows, cols, workPixels);
+		int totalAbsDelta = Math.abs(delta);
+		boolean isEnlarge = (delta < 0);
 
-			int[][] dynProgResult = SeamCarving.dynamicProgrammingSumEnergy(rows, cols, energyMap, mode);
+		//Help variables
+		int absDelta;
 
-			//Calculate one seam
-			Seam s = new Seam(rows);
-			s.form(dynProgResult, mode);
+		//save a copy of original workPixels & absDelta for enlarging case
+		int[][] origWorkPixels = workPixels;
+		int origAbsDelta;
 
-			//Carve seam in/out
-			int[][] carveSeamPixels = (is_in) ? carveInSeam(workPixels, rows, cols + 1, s) :
-												 carveOutSeam(workPixels, rows, cols - 1, s);
-			workPixels = carveSeamPixels;
+		//In case of enlarging the image more than twice - do it in steps
+		while (totalAbsDelta > 0){
+			if (totalAbsDelta >= cols){
+				absDelta = cols-1;
+				totalAbsDelta -= cols-1;
+			}
+			else{
+				absDelta = totalAbsDelta;
+				totalAbsDelta = 0;
+			}
+			origAbsDelta = absDelta;
 
-			//Update abs Delta & columns
-			absDelta--;
-			if (is_in){
-				cols++;
-			}else{
+			//Help variables
+			int[][] energyMap = new int[rows][cols];
+			Seam s = null;
+			int jStart = 0;
+			int jEnd = cols;
+
+			//Create Seam array for enlarging case
+			Seam[] dupSeams = new Seam[cols];
+			for (int i=0 ; i < cols ; i++){
+				dupSeams[i] = null;
+			}
+
+			//Remove absDelta seams (in case of enlarging - will save the removed seams and add them to the original image)
+			while (absDelta > 0) {
+				//Calculate energy map results
+				if (s != null){
+					jStart = s.min-1;
+					jEnd = s.max+3;
+				}
+
+				energyMap = (energyType == ENERGY_FORWARD) ?
+						SeamCarving.energyFunctionFor(rows, cols, jStart, jEnd, workPixels, energyMap) :
+						(energyType == ENERGY_ENTROPY) ?
+								SeamCarving.energyFunctionEnt(rows, cols, jStart-4, jEnd+4, workPixels, energyMap) :
+								SeamCarving.energyFunctionReg(rows, cols, jStart, jEnd, workPixels, energyMap);
+
+				//Calculate dynamic programming results
+				int[][] dynProgResult = SeamCarving.dynamicProgrammingSumEnergy(rows, cols, energyMap, mode);
+
+				//Calculate one seam
+				s = new Seam(rows);
+				s.form(dynProgResult, mode);
+
+				//in case of enlarging - save s in dupSeams
+				if (isEnlarge){
+					dupSeams[s.cols[rows-1]] = s; //TODO: modify s to match original image pixels
+				}
+
+				//Carve seam out
+				workPixels = carveOutSeam(workPixels, rows, cols - 1, s);
+				energyMap = carveOutSeam(energyMap, rows, cols - 1, s);
+
+				//Update abs Delta & columns
+				absDelta--;
 				cols--;
+			}
+
+			//In case of enlarging the image - enlarge image by saved seams
+			if (isEnlarge){
+				cols += origAbsDelta;
+				//TODO: uncomment when dupSeams is done. meanwhile - duplicate last seam (just for running without exceptions)
+				for (int i=0 ; i<origAbsDelta ; i++) {//DELETE this line
+					origWorkPixels = carveInSeam(origWorkPixels, rows, cols + 1, s);//DELETE this line
+					cols++;//DELETE this line
+				}//DELETE this line
+				//int i = cols-1;//uncomment
+				//for (; i > -1 ; i--){//uncomment
+//					if (dupSeams[i] != null){//uncomment
+//						origWorkPixels = carveInSeam(origWorkPixels, rows, cols + 1, dupSeams[i]);//uncomment
+//						cols++;//uncomment
+//					}//uncomment
+//				}//uncomment
+				workPixels = origWorkPixels;
 			}
 		}
 
@@ -163,49 +219,55 @@ public class SeamCarving
 					pixelsResult[j][i] = workPixels[i][j];
 				}
 			}
-			return pixelsResult;
+			return (pixelsResult);
 		}
 
-		return workPixels;
+		return (workPixels);
 	}
 
-	private static int[][] energyFunctionReg(int rows, int cols, int[][] pixels)
+	private static int[][] energyFunctionReg(int rows, int cols, int jStart, int jEnd, int[][] pixels, int[][] prevEnergyMap)
 	{
-		int[][] energyMap = new int[rows][cols];
+		if (jStart < 0) jStart = 0;
+		if (jEnd > cols) jEnd = cols;
+
 		for( int i = 0; i < rows; i++ )
-			for( int j = 0; j < cols; j++ )
-				energyMap[i][j] = ColorsGradient(i, j, rows, cols, pixels);
-		return energyMap;
+			for( int j = jStart; j < jEnd; j++ )
+				prevEnergyMap[i][j] = ColorsGradient(i, j, rows, cols, pixels);
+		return prevEnergyMap;
 	}
 
-	private static int[][] energyFunctionEnt(int rows, int cols, int[][] pixels)
+	private static int[][] energyFunctionEnt(int rows, int cols, int jStart, int jEnd, int[][] pixels, int[][] prevEnergyMap)
 	{
+		if (jStart < 0) jStart = 0;
+		if (jEnd > cols) jEnd = cols;
+
         int entropy;
         int gradient;
         double entWeight = 0.5; //value between 0 to 1. TODO: decide on entropy weight according to experiments
         double gradWeight = 1 - entWeight;
-		int[][] energyMap = new int[rows][cols];
+		//int[][] energyMap = new int[rows][cols];
 
 		for( int i = 0; i < rows; i++ ){
-            for( int j = 0; j < cols; j++ ){
+            for( int j = jStart; j < jEnd; j++ ){
                 gradient = ColorsGradient(i, j, rows, cols, pixels);
                 entropy = entropyCalc(i, j, rows, cols, pixels);
-                energyMap[i][j] = (int)(gradient*gradWeight + entropy*entWeight);
+				prevEnergyMap[i][j] = (int)(gradient*gradWeight + entropy*entWeight);
             }
         }
 
-
-		return energyMap;
+		return prevEnergyMap;
 	}
 
-	private static int[][] energyFunctionFor(int rows, int cols, int[][] pixels)
+	private static int[][] energyFunctionFor(int rows, int cols, int jStart, int jEnd, int[][] pixels, int[][] prevEnergyMap)
 	{
 		//TODO: IMPLEMENT. right now - same as energyFunctionReg.
-		int[][] energyMap = new int[rows][cols];
+		if (jStart < 0) jStart = 0;
+		if (jEnd > cols) jEnd = cols;
+
 		for( int i = 0; i < rows; i++ )
-			for( int j = 0; j < cols; j++ )
-				energyMap[i][j] = ColorsGradient(i, j, rows, cols, pixels);
-		return energyMap;
+			for( int j = jStart; j < jEnd; j++ )
+				prevEnergyMap[i][j] = ColorsGradient(i, j, rows, cols, pixels);
+		return prevEnergyMap;
 	}
 
 	private static int ColorsGradient(int i, int j, int rows, int cols, int[][] pixels)
@@ -298,7 +360,7 @@ public class SeamCarving
         int green = c.getGreen();
         int blue = c.getBlue();
 
-        return ((c.getRed() + c.getGreen() + c.getBlue()) / 3);
+        return (((c.getRed() + c.getGreen() + c.getBlue()) / 3) + 1);
     }
 
 	private static int[][] dynamicProgrammingSumEnergy(int rows, int cols, int[][] energyMap, int mode)
@@ -344,8 +406,7 @@ public class SeamCarving
 		return dynProgResult;
 	}
 
-	private static void dynamicProgrammingStep(int[][] energyMap, int[][] dynProgResult, boolean[] lookAt, int i,
-											   int j)
+	private static void dynamicProgrammingStep(int[][] energyMap, int[][] dynProgResult, boolean[] lookAt, int i, int j)
 	{
 		int minimalValueFound = Integer.MAX_VALUE;
 		for (int k = 0; k < 3; k++)
@@ -359,6 +420,8 @@ public class SeamCarving
 	private static int[][] carveOutSeam(int[][] pixels, int numOfRows, int newNumOfCols, Seam s)
 	{
 		int[][] newPixels = new int[numOfRows][newNumOfCols];
+		if (s == null) return newPixels;
+
 		for (int row = 0; row < numOfRows; row++)
 		{
 			int skipIndex = s.cols[row];
@@ -371,6 +434,7 @@ public class SeamCarving
 	private static int[][] carveInSeam(int[][] pixels, int numOfRows, int newNumOfCols, Seam s)
 	{
 		int[][] newPixels = new int[numOfRows][newNumOfCols];
+		if (s == null) return newPixels;
 
         Color cLeft;
         Color cRight;
@@ -385,7 +449,7 @@ public class SeamCarving
             int dupIndex = s.cols[row];
             System.arraycopy(pixels[row], 0, newPixels[row], 0, dupIndex+1);
 
-            if (dupIndex != (newNumOfCols-2)){ //TODO: is this the right way for interpulation with neighbors?
+            if (dupIndex != (newNumOfCols-2)){
                 //Set new pixel as average of its left & right neighbors;
                 cLeft= new Color(pixels[row][dupIndex]);
                 cRight=new Color(pixels[row][dupIndex+1]);

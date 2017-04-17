@@ -22,6 +22,19 @@ public class Seam
 		this.max = -1;
 	}
 
+	Seam(int rows, Seam s, int[][] origIndexes)
+	{
+		this.rows = rows;
+		this.cols = new int[rows];
+		this.min = Integer.MAX_VALUE;
+		this.max = -1;
+
+		for (int i = 0 ; i < rows ; i++){
+			this.cols[i] = origIndexes[i][s.cols[i]];
+		}
+	}
+
+
 	public void form(int[][] dynProgResult, int mode) 
 	{
 		int rows = dynProgResult.length;

@@ -123,92 +123,99 @@ public class SeamCarving
 		int[][] workPixels = (transpose) ? pixelsTrans : pixels;
 
 		//Set absolute delta and carveIn/carveOut boolean variable
-		int totalAbsDelta = Math.abs(delta);
+		int absDelta = Math.abs(delta);
 		boolean isEnlarge = (delta < 0);
 
-		//Help variables
-		int absDelta;
+		//Enlarge more than image size - first modification
+		if (isEnlarge){
+			//In case of enlarging the image more than its size - do it in steps: first stretch (equivalent to adding seams),
+			// 																	  when absDelta<cols - add seams.
+			while (absDelta >= cols){
+				for (int i=0 ; i < cols ; i++){
+					//create straight seam
+					int[] colsArray = new int[rows];
+					java.util.Arrays.fill(colsArray, i*2);
+					Seam sStraight = new Seam(colsArray, rows);
+					//insert new straight seam
+					workPixels = carveInSeam(workPixels, rows, cols + i + 1, sStraight);
+				}
+				absDelta -= cols;
+				cols *= 2;
+			}
+		}
 
 		//save a copy of original workPixels & absDelta for enlarging case
 		int[][] origWorkPixels = workPixels;
-		int origAbsDelta;
+		int origAbsDelta = absDelta;
 
-		//In case of enlarging the image more than twice - do it in steps
-		while (totalAbsDelta > 0){
-			if (totalAbsDelta >= cols){
-				absDelta = cols-1;
-				totalAbsDelta -= cols-1;
+		//Create Seam array for enlarging case
+		Seam[] dupSeams = new Seam[cols];
+		for (int i=0 ; i < cols ; i++){
+			dupSeams[i] = null;
+		}
+
+		//Create original indexes matrix for enlarging case
+		int[][] origIndexes = new int[rows][cols];
+		for (int i = 0 ; i < rows ; i++){
+			for(int j = 0 ; j < cols ; j++){
+				origIndexes[i][j] = j;
 			}
-			else{
-				absDelta = totalAbsDelta;
-				totalAbsDelta = 0;
-			}
-			origAbsDelta = absDelta;
+		}
 
-			//Help variables
-			int[][] energyMap = new int[rows][cols];
-			Seam s = null;
-			int jStart = 0;
-			int jEnd = cols;
+		//Help variables
+		int[][] energyMap = new int[rows][cols];
+		Seam s = null;
+		int jStart = 0;
+		int jEnd = cols;
 
-			//Create Seam array for enlarging case
-			Seam[] dupSeams = new Seam[cols];
-			for (int i=0 ; i < cols ; i++){
-				dupSeams[i] = null;
-			}
-
-			//Remove absDelta seams (in case of enlarging - will save the removed seams and add them to the original image)
-			while (absDelta > 0) {
-				//Calculate energy map results
-				if (s != null){
-					jStart = s.min-1;
-					jEnd = s.max+3;
-				}
-
-				energyMap = (energyType == ENERGY_FORWARD) ?
-						SeamCarving.energyFunctionFor(rows, cols, jStart, jEnd, workPixels, energyMap) :
-						(energyType == ENERGY_ENTROPY) ?
-								SeamCarving.energyFunctionEnt(rows, cols, jStart-4, jEnd+4, workPixels, energyMap) :
-								SeamCarving.energyFunctionReg(rows, cols, jStart, jEnd, workPixels, energyMap);
-
-				//Calculate dynamic programming results
-				int[][] dynProgResult = SeamCarving.dynamicProgrammingSumEnergy(rows, cols, energyMap, mode);
-
-				//Calculate one seam
-				s = new Seam(rows);
-				s.form(dynProgResult, mode);
-
-				//in case of enlarging - save s in dupSeams
-				if (isEnlarge){
-					dupSeams[s.cols[rows-1]] = s; //TODO: modify s to match original image pixels
-				}
-
-				//Carve seam out
-				workPixels = carveOutSeam(workPixels, rows, cols - 1, s);
-				energyMap = carveOutSeam(energyMap, rows, cols - 1, s);
-
-				//Update abs Delta & columns
-				absDelta--;
-				cols--;
+		//Remove absDelta seams (in case of enlarging - will save the removed seams and add them to the original image)
+		while (absDelta > 0) {
+			//Calculate energy map results
+			if (s != null){
+				jStart = s.min-1;
+				jEnd = s.max+2;
 			}
 
-			//In case of enlarging the image - enlarge image by saved seams
+			energyMap = (energyType == ENERGY_FORWARD) ?
+					SeamCarving.energyFunctionFor(rows, cols, jStart, jEnd, workPixels, energyMap) :
+					(energyType == ENERGY_ENTROPY) ?
+							SeamCarving.energyFunctionEnt(rows, cols, jStart-4, jEnd+4, workPixels, energyMap) :
+							SeamCarving.energyFunctionReg(rows, cols, jStart, jEnd, workPixels, energyMap);
+
+			//Calculate dynamic programming results
+			int[][] dynProgResult = SeamCarving.dynamicProgrammingSumEnergy(rows, cols, energyMap, mode);
+
+			//Calculate one seam
+			s = new Seam(rows);
+			s.form(dynProgResult, mode);
+
+			//In case of enlarging - save s (with original indexes) in dupSeams
 			if (isEnlarge){
-				cols += origAbsDelta;
-				//TODO: uncomment when dupSeams is done. meanwhile - duplicate last seam (just for running without exceptions)
-				for (int i=0 ; i<origAbsDelta ; i++) {//DELETE this line
-					origWorkPixels = carveInSeam(origWorkPixels, rows, cols + 1, s);//DELETE this line
-					cols++;//DELETE this line
-				}//DELETE this line
-				//int i = cols-1;//uncomment
-				//for (; i > -1 ; i--){//uncomment
-//					if (dupSeams[i] != null){//uncomment
-//						origWorkPixels = carveInSeam(origWorkPixels, rows, cols + 1, dupSeams[i]);//uncomment
-//						cols++;//uncomment
-//					}//uncomment
-//				}//uncomment
-				workPixels = origWorkPixels;
+				Seam sOrigInd = new Seam(rows, s, origIndexes);
+				dupSeams[sOrigInd.cols[rows-1]] = sOrigInd;
+				//Carve seam out (from origIndexes matrix)
+				origIndexes = carveOutSeam(origIndexes, rows, cols - 1, s);
 			}
+
+			//Carve seam out
+			workPixels = carveOutSeam(workPixels, rows, cols - 1, s);
+			energyMap = carveOutSeam(energyMap, rows, cols - 1, s);
+
+			//Update abs Delta & columns
+			absDelta--;
+			cols--;
+		}
+
+		//In case of enlarging the image - enlarge image by saved seams
+		if (isEnlarge){
+			cols += origAbsDelta;
+			for (int i = cols-1 ; i > -1 ; i--){
+				if (dupSeams[i] != null){
+					origWorkPixels = carveInSeam(origWorkPixels, rows, cols + 1, dupSeams[i]);
+					cols++;
+				}
+			}
+			workPixels = origWorkPixels;
 		}
 
 		//Transpose matrix back if needed
@@ -449,7 +456,7 @@ public class SeamCarving
             int dupIndex = s.cols[row];
             System.arraycopy(pixels[row], 0, newPixels[row], 0, dupIndex+1);
 
-            if (dupIndex != (newNumOfCols-2)){
+            if (dupIndex < (newNumOfCols-2)){
                 //Set new pixel as average of its left & right neighbors;
                 cLeft= new Color(pixels[row][dupIndex]);
                 cRight=new Color(pixels[row][dupIndex+1]);
@@ -466,8 +473,10 @@ public class SeamCarving
             }else{
                 newPixels[row][dupIndex+1] = pixels[row][dupIndex];
             }
+			if (dupIndex != (newNumOfCols-2)){
+				System.arraycopy(pixels[row], dupIndex + 1, newPixels[row], dupIndex+2, newNumOfCols - (dupIndex+2));
+			}
 
-            System.arraycopy(pixels[row], dupIndex + 1, newPixels[row], dupIndex+2, newNumOfCols - (dupIndex+2));
         }
 		return newPixels;
 	}

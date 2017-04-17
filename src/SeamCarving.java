@@ -186,7 +186,7 @@ public class SeamCarving
 			{
 				jStart = s.min-1;
 				jEnd = s.max+2;
-			}
+			} 
 			
 			int[][] dynProgResult;
 			

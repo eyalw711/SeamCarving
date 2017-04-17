@@ -42,7 +42,7 @@ public class SeamCarving
 		try 
 		{
 			//Read image from input file
-			BufferedImage img = null;
+			BufferedImage img;
 			img = ImageIO.read(new File(inputImageFilename));
 
 			//Get image dimensions
@@ -66,7 +66,7 @@ public class SeamCarving
 													  removeOrAddSeams(outRows, cols, deltaCols, pixelsRowsSeamed, VERTICAL_SEAM, energyType);
 
 		    //Set result image
-			BufferedImage resultImage = null;
+			BufferedImage resultImage;
 			resultImage = new BufferedImage(outCols, outRows, BufferedImage.TYPE_INT_RGB);
 		    for (int i = 0; i < outRows; i++) {
 		    	for (int j = 0; j < outCols; j++) {
@@ -75,8 +75,8 @@ public class SeamCarving
 		    }
 			ImageIO.write(resultImage, "jpg", new File(outputImageFilename));
 
-		    System.out.println("Source image Height = " + img.getHeight() + ", Width = " + img.getWidth());
-			System.out.println("Result image Height = " + resultImage.getHeight() + ", Width = " + resultImage.getWidth());
+		    System.out.println("Source image "+ inputImageFilename + ": Height = " + img.getHeight() + ", Width = " + img.getWidth());
+			System.out.println("Result image "+ outputImageFilename +": Height = " + resultImage.getHeight() + ", Width = " + resultImage.getWidth());
 		} 
 		catch (IOException e) 
 		{
@@ -208,14 +208,23 @@ public class SeamCarving
 
 		//In case of enlarging the image - enlarge image by saved seams
 		if (isEnlarge){
+			//Return cols to original size
 			cols += origAbsDelta;
-			for (int i = cols-1 ; i > -1 ; i--){
+
+			//Create bool matrix of original size, cell=true if it should be duplicated
+			//Create the matrix, initialize with false
+			boolean[][] isDup = new boolean[rows][cols];
+			//Translate seams to true value in isDup matrix
+			for (int i = 0 ; i < cols ; i++){
 				if (dupSeams[i] != null){
-					origWorkPixels = carveInSeam(origWorkPixels, rows, cols + 1, dupSeams[i]);
-					cols++;
+					for (int j = 0 ; j < dupSeams[i].rows ; j++){
+						isDup[j][dupSeams[i].cols[j]] = true;
+					}
 				}
 			}
-			workPixels = origWorkPixels;
+			//Create result matrix using isDup matrix
+			workPixels = duplicateCells(origWorkPixels, isDup, rows, cols, origAbsDelta);
+			cols+=origAbsDelta;
 		}
 
 		//Transpose matrix back if needed
@@ -302,7 +311,7 @@ public class SeamCarving
 		int green = c.getGreen();
 		int blue = c.getBlue();
 
-		Color n = null;
+		Color n;
 		int delta_red, delta_green, delta_blue;
 		for ( ; ii < iimax; ii++)
 		{
@@ -443,36 +452,13 @@ public class SeamCarving
 		int[][] newPixels = new int[numOfRows][newNumOfCols];
 		if (s == null) return newPixels;
 
-        Color cLeft;
-        Color cRight;
-
-        int red;
-        int green;
-        int blue;
-        int rgb;
-
         for (int row = 0; row < numOfRows; row++)
         {
             int dupIndex = s.cols[row];
             System.arraycopy(pixels[row], 0, newPixels[row], 0, dupIndex+1);
 
-            if (dupIndex < (newNumOfCols-2)){
-                //Set new pixel as average of its left & right neighbors;
-                cLeft= new Color(pixels[row][dupIndex]);
-                cRight=new Color(pixels[row][dupIndex+1]);
+			newPixels[row][dupIndex+1] = duplicateIndex(dupIndex, pixels[row]);
 
-                red =   (cLeft.getRed()     + cRight.getRed()   ) / 2;
-                green = (cLeft.getGreen()   + cRight.getGreen() ) / 2;
-                blue =  (cLeft.getBlue()    + cRight.getBlue()  ) / 2;
-
-                rgb = red;
-                rgb = (rgb << 8) + green;
-                rgb = (rgb << 8) + blue;
-
-                newPixels[row][dupIndex+1] = rgb;
-            }else{
-                newPixels[row][dupIndex+1] = pixels[row][dupIndex];
-            }
 			if (dupIndex != (newNumOfCols-2)){
 				System.arraycopy(pixels[row], dupIndex + 1, newPixels[row], dupIndex+2, newNumOfCols - (dupIndex+2));
 			}
@@ -481,7 +467,41 @@ public class SeamCarving
 		return newPixels;
 	}
 
+	private static int[][] duplicateCells(int[][] origWorkPixels, boolean[][] isDup, int rows, int cols, int delta){
+		int[][] result = new int[rows][cols+delta];
+		for (int i = 0 ; i < rows ; i++){
+			int currDelta = 0;
+			for (int j = 0 ; j < cols ; j++){
+				result[i][j+currDelta] = origWorkPixels[i][j];
+				if (isDup[i][j]){
+					currDelta++;
+					result[i][j+currDelta] = duplicateIndex(j, origWorkPixels[i]);
+				}
+			}
+		}
+		return result;
+	}
 
+	private static int duplicateIndex(int dupIndex, int[] origPixelsRow){
+		int cols = origPixelsRow.length;
+		if (dupIndex < (cols-1)){
+			//Set new pixel as average of its left & right neighbors;
+			Color cLeft  = new Color(origPixelsRow[dupIndex]);
+			Color cRight = new Color(origPixelsRow[dupIndex+1]);
+
+			int red   = (cLeft.getRed()     + cRight.getRed()   ) / 2;
+			int green = (cLeft.getGreen()   + cRight.getGreen() ) / 2;
+			int blue  = (cLeft.getBlue()    + cRight.getBlue()  ) / 2;
+
+			int rgb = red;
+			rgb = (rgb << 8) + green;
+			rgb = (rgb << 8) + blue;
+
+			return rgb;
+		}else{
+			return origPixelsRow[dupIndex];
+		}
+	}
 	private static int[][] paintSeam(int[][]pixelsSeams, int numOfRows, Seam s)//for DEBUG only
 	{
 		for (int row = 0; row < numOfRows; row++)

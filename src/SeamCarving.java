@@ -86,7 +86,7 @@ public class SeamCarving
 		//Print running time message
 		long endTime   = System.currentTimeMillis();
 		long totalTime = endTime - startTime;
-		System.out.println("running time = " + totalTime/1000 + " seconds");
+		System.out.println("running time = " + totalTime/1000.0 + " seconds");
 	}
 
 	private static void imageTo2DPixelsArray(BufferedImage img, int rows, int cols, int[][] pixels) 
@@ -145,7 +145,11 @@ public class SeamCarving
 		}
 
 		//save a copy of original workPixels & absDelta for enlarging case
-		int[][] origWorkPixels = workPixels;
+		//int[][] origWorkPixels = workPixels;//TODO: check if can be removed
+		int [][] origWorkPixels = new int[workPixels.length][];
+		for(int i = 0; i < workPixels.length; i++)
+			origWorkPixels[i] = workPixels[i].clone();
+
 		int origAbsDelta = absDelta;
 
 		//Create Seam array for enlarging case
@@ -156,9 +160,11 @@ public class SeamCarving
 
 		//Create original indexes matrix for enlarging case
 		int[][] origIndexes = new int[rows][cols];
-		for (int i = 0 ; i < rows ; i++){
-			for(int j = 0 ; j < cols ; j++){
-				origIndexes[i][j] = j;
+		if (isEnlarge) {
+			for (int i = 0; i < rows; i++) {
+				for (int j = 0; j < cols; j++) {
+					origIndexes[i][j] = j;
+				}
 			}
 		}
 
@@ -294,7 +300,7 @@ public class SeamCarving
 		int ii = - 1, jj = -1, iimax = 2,  jjmax = 2;
 		if ( i == 0 || i == rows - 1 || j == 0 || j == cols - 1)
 		{
-			//special case: try "ignoring" edges:
+			//Edge cases
 			if (i == 0)
 				ii = 0;
 			else if (i == rows - 1)
@@ -502,6 +508,7 @@ public class SeamCarving
 			return origPixelsRow[dupIndex];
 		}
 	}
+
 	private static int[][] paintSeam(int[][]pixelsSeams, int numOfRows, Seam s)//for DEBUG only
 	{
 		for (int row = 0; row < numOfRows; row++)

@@ -1,4 +1,7 @@
 
+import java.util.Random;
+
+
 public class Seam 
 {
 	public int[] cols;
@@ -54,6 +57,7 @@ public class Seam
 		
 		//look at lowest row to find correct seam:
 		int minimalIndexFound = lowestRowMinimalValueIndex(dynProgResult, rows, cols);
+		
 		this.min = minimalIndexFound;
 		this.max = minimalIndexFound;
 
@@ -116,10 +120,26 @@ public class Seam
 		return minimalIndexFound;
 	}
 
-	private int lowestRowMinimalValueIndex(int[][] dynProgResult, int rows, int cols) {
+	private int lowestRowMinimalValueIndex(int[][] dynProgResult, int rows, int cols) 
+	{
+		Random rand = new Random();
+		boolean fromStart = (rand.nextInt(2) == 1) ? true : false;
+		
+		int j,k;
+		if (fromStart)
+		{
+			j = 0;
+			k = 1;
+		}
+		else
+		{
+			j = cols - 1;
+			k = -1;
+		}
+		
 		int minimalValueFound = Integer.MAX_VALUE;
 		int minimalIndexFound = -1;
-		for (int j = 0; j < cols; j++)
+		for (; -1 < j && j < cols; j+=k)
 		{
 			if (dynProgResult[rows - 1][j] < minimalValueFound)
 			{

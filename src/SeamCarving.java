@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.IOException;
 import javax.imageio.ImageIO;
 
+
 public class SeamCarving 
 {
 	static final int VERTICAL = 0;
@@ -180,7 +181,6 @@ public class SeamCarving
 		//Remove absDelta seams (in case of enlarging - will save the removed seams and add them to the original image)
 		while (absDelta > 0) 
 		{
-			System.out.println("removed " + seamsRemoved++ + " seams.");
 			//Calculate energy map results
 			if (s != null)
 			{
@@ -193,16 +193,16 @@ public class SeamCarving
 			if (energyType == ENERGY_ENTROPY || energyType == ENERGY_REGULAR)
 			{
 				if (energyType == ENERGY_REGULAR)
-					SeamCarving.energyFunctionReg(rows, cols, jStart, jEnd, origWorkPixels, energyMap);
+					SeamCarving.energyFunctionReg(rows, cols, jStart, jEnd, workPixels, energyMap);
 				else
-					SeamCarving.energyFunctionEnt(rows, cols, jStart-4, jEnd+4, origWorkPixels, energyMap);
+					SeamCarving.energyFunctionEnt(rows, cols, jStart-4, jEnd+4, workPixels, energyMap);
 				
 				//Calculate dynamic programming results
 				dynProgResult = SeamCarving.dynamicProgrammingSumEnergy(rows, cols, energyMap, mode);
 			}
 			else	//energyType == ENERGY_FORWARD
 			{
-				SeamCarving.energyFunctionFor(rows, cols, jStart, jEnd, origWorkPixels, C_LUR_energy);
+				SeamCarving.energyFunctionFor(rows, cols, jStart, jEnd, workPixels, C_LUR_energy);
 				dynProgResult = SeamCarving.dynamicProgrammingSumForwardEnergy(rows, cols, C_LUR_energy, mode);
 			}
 			
@@ -219,15 +219,15 @@ public class SeamCarving
 
 			//Carve seam out
 			workPixels = carveOutSeam(workPixels, rows, cols - 1, s);
-			if (energyType == ENERGY_ENTROPY || energyType == ENERGY_REGULAR)
+			if (energyType == ENERGY_FORWARD)
+			{
+				C_LUR_energy = carveOutSeam(C_LUR_energy, rows, cols - 1, s);
+			}	
+			else
 			{
 				energyMap = carveOutSeam(energyMap, rows, cols - 1, s);
 			}
-			else
-			{
-				C_LUR_energy = carveOutSeam(C_LUR_energy, rows, cols - 1, s);
-			}
-			
+				
 			//Update abs Delta & columns
 			absDelta--;
 			cols--;
@@ -281,37 +281,39 @@ public class SeamCarving
 			{
 				energySelections = c_LUR_energy[i][j];
 				
-				if (i == 0 && ( j == 0 || j == cols - 1)) 	//one of top corners
+				
+				if (i==0)								//One of top row
 				{
-					//removing pixel adds no new edges to the image
-					dynProgResult[i][j] = 0;
-				}
-				else if (i==0)								//One of top row
-				{
-					//removing pixel only creates topDiff
-					dynProgResult[i][j] = energySelections.getSecond();
-				}
-				else if ( j == 0 || j == cols - 1)			//One of sides
-				{
-					//removing pixel creates rightDiff or leftDiff only
-					if (j == 0)
-					{
-						//removing pixel only creates rightDiff
-						dynProgResult[i][j] = Math.min(dynProgResult[i-1][j],
-								dynProgResult[i-1][j+1] + energySelections.getThird());
-					}
-					else
-					{
-						//removing pixel only creates leftDiff
-						dynProgResult[i][j] = Math.min(dynProgResult[i-1][j],
-								dynProgResult[i-1][j-1] + energySelections.getFirst());
-					}
+					dynProgResult[i][j] = Math.min(Math.min(energySelections.getFirst(),
+							energySelections.getSecond()),
+							energySelections.getThird());
 				}
 				else
 				{
-					dynProgResult[i][j] = Math.min(dynProgResult[i-1][j-1] + energySelections.getFirst(),
-										  Math.min(dynProgResult[i-1][j]   + energySelections.getSecond(),
-												   dynProgResult[i-1][j+1] + energySelections.getThird()));
+					int val1, val2, val3;
+					
+					try{
+						val1 = dynProgResult[i-1][j-1] + energySelections.getFirst();
+					}catch (IndexOutOfBoundsException e){
+						val1 = Integer.MAX_VALUE;
+					}
+					
+					try{
+						val2 = dynProgResult[i-1][j]   + energySelections.getSecond();
+					}catch (IndexOutOfBoundsException e){
+						val2 = Integer.MAX_VALUE;
+					}
+					
+					try{
+						val3 = dynProgResult[i-1][j+1] + energySelections.getThird();
+					}catch (IndexOutOfBoundsException e){
+						val3 = Integer.MAX_VALUE;
+					}
+					
+					if (mode == SeamCarving.VERTICAL)
+						dynProgResult[i][j] = val2;
+					else
+						dynProgResult[i][j] = Math.min(Math.min(val1, val2), val3);
 				}
 			}
 		}
@@ -366,16 +368,18 @@ public class SeamCarving
 		{
 			for (int j = jStart; j < jEnd; j++)
 			{
+				int baseEnerg = ColorsGradient(i, j, rows, cols, pixels);
+				
 				if (i == 0 && ( j == 0 || j == cols - 1)) 	//one of top corners
 				{
 					//removing pixel adds no new edges to the image
-					c_LUR[i][j] = new TripletOfInts(0, 0, 0);
+					c_LUR[i][j] = new TripletOfInts(baseEnerg, baseEnerg, baseEnerg);
 				}
 				else if (i==0)								//One of top row
 				{
 					//removing pixel only creates topDiff
 					topDiff = forwardCalcTopDiff(pixels, i, j);
-					c_LUR[i][j] = new TripletOfInts(0, topDiff, 0);
+					c_LUR[i][j] = new TripletOfInts(baseEnerg, baseEnerg + topDiff, baseEnerg);
 				}
 				else if ( j == 0 || j == cols - 1)			//One of sides
 				{
@@ -384,13 +388,13 @@ public class SeamCarving
 					{
 						//removing pixel only creates rightDiff
 						rightDiff = forwardCalcRightDiff(pixels, i, j);
-						c_LUR[i][j] = new TripletOfInts(rightDiff, 0, 0);
+						c_LUR[i][j] = new TripletOfInts(baseEnerg + rightDiff, baseEnerg, baseEnerg);
 					}
 					else
 					{
 						//removing pixel only creates leftDiff
 						leftDiff = forwardCalcLeftDiff(pixels, i, j);
-						c_LUR[i][j] = new TripletOfInts(0, 0, leftDiff);
+						c_LUR[i][j] = new TripletOfInts(baseEnerg, baseEnerg, baseEnerg + leftDiff);
 					}
 				}
 				else
@@ -405,9 +409,9 @@ public class SeamCarving
 					//rightDiff
 					rightDiff = forwardCalcRightDiff(pixels, i, j);
 					
-					CL = leftDiff + topDiff;
-					CU = topDiff;
-					CR = rightDiff + topDiff;
+					CL = baseEnerg + leftDiff + topDiff;
+					CU = baseEnerg + topDiff;
+					CR = baseEnerg + rightDiff + topDiff;
 					
 					c_LUR[i][j] = new TripletOfInts(CL, CU, CR);
 				}

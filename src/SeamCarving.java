@@ -145,7 +145,6 @@ public class SeamCarving
 		}
 
 		//save a copy of original workPixels & absDelta for enlarging case
-		//int[][] origWorkPixels = workPixels;//TODO: check if can be removed
 		int [][] origWorkPixels = new int[workPixels.length][];
 		for(int i = 0; i < workPixels.length; i++)
 			origWorkPixels[i] = workPixels[i].clone();
@@ -170,28 +169,43 @@ public class SeamCarving
 
 		//Help variables
 		int[][] energyMap = new int[rows][cols];
+		TripletOfInts[][] C_LUR_energy = new TripletOfInts[rows][cols];
+		
 		Seam s = null;
 		int jStart = 0;
 		int jEnd = cols;
-
+		
+		int seamsRemoved = 0; //TODO: remove
+		
 		//Remove absDelta seams (in case of enlarging - will save the removed seams and add them to the original image)
-		while (absDelta > 0) {
+		while (absDelta > 0) 
+		{
+			System.out.println("removed " + seamsRemoved++ + " seams.");
 			//Calculate energy map results
-			if (s != null){
+			if (s != null)
+			{
 				jStart = s.min-1;
 				jEnd = s.max+2;
 			}
-
-			energyMap = (energyType == ENERGY_FORWARD) ?
-					SeamCarving.energyFunctionFor(rows, cols, jStart, jEnd, workPixels, energyMap) :
-					(energyType == ENERGY_ENTROPY) ?
-							SeamCarving.energyFunctionEnt(rows, cols, jStart-4, jEnd+4, workPixels, energyMap) :
-							SeamCarving.energyFunctionReg(rows, cols, jStart, jEnd, workPixels, energyMap);
-
-			//Calculate dynamic programming results
-			int[][] dynProgResult = SeamCarving.dynamicProgrammingSumEnergy(rows, cols, energyMap, mode);
-
-			//Calculate one seam
+			
+			int[][] dynProgResult;
+			
+			if (energyType == ENERGY_ENTROPY || energyType == ENERGY_REGULAR)
+			{
+				if (energyType == ENERGY_REGULAR)
+					SeamCarving.energyFunctionReg(rows, cols, jStart, jEnd, origWorkPixels, energyMap);
+				else
+					SeamCarving.energyFunctionEnt(rows, cols, jStart-4, jEnd+4, origWorkPixels, energyMap);
+				
+				//Calculate dynamic programming results
+				dynProgResult = SeamCarving.dynamicProgrammingSumEnergy(rows, cols, energyMap, mode);
+			}
+			else	//energyType == ENERGY_FORWARD
+			{
+				SeamCarving.energyFunctionFor(rows, cols, jStart, jEnd, origWorkPixels, C_LUR_energy);
+				dynProgResult = SeamCarving.dynamicProgrammingSumForwardEnergy(rows, cols, C_LUR_energy, mode);
+			}
+			
 			s = new Seam(rows);
 			s.form(dynProgResult, mode);
 
@@ -205,8 +219,15 @@ public class SeamCarving
 
 			//Carve seam out
 			workPixels = carveOutSeam(workPixels, rows, cols - 1, s);
-			energyMap = carveOutSeam(energyMap, rows, cols - 1, s);
-
+			if (energyType == ENERGY_ENTROPY || energyType == ENERGY_REGULAR)
+			{
+				energyMap = carveOutSeam(energyMap, rows, cols - 1, s);
+			}
+			else
+			{
+				C_LUR_energy = carveOutSeam(C_LUR_energy, rows, cols - 1, s);
+			}
+			
 			//Update abs Delta & columns
 			absDelta--;
 			cols--;
@@ -247,6 +268,56 @@ public class SeamCarving
 		return (workPixels);
 	}
 
+	
+
+	private static int[][] dynamicProgrammingSumForwardEnergy(int rows, int cols, TripletOfInts[][] c_LUR_energy, int mode) 
+	{
+		int[][] dynProgResult = new int[rows][cols];
+		TripletOfInts energySelections;
+		
+		for (int i = 0; i < rows; i++)
+		{
+			for (int j = 0; j < cols; j++)
+			{
+				energySelections = c_LUR_energy[i][j];
+				
+				if (i == 0 && ( j == 0 || j == cols - 1)) 	//one of top corners
+				{
+					//removing pixel adds no new edges to the image
+					dynProgResult[i][j] = 0;
+				}
+				else if (i==0)								//One of top row
+				{
+					//removing pixel only creates topDiff
+					dynProgResult[i][j] = energySelections.getSecond();
+				}
+				else if ( j == 0 || j == cols - 1)			//One of sides
+				{
+					//removing pixel creates rightDiff or leftDiff only
+					if (j == 0)
+					{
+						//removing pixel only creates rightDiff
+						dynProgResult[i][j] = Math.min(dynProgResult[i-1][j],
+								dynProgResult[i-1][j+1] + energySelections.getThird());
+					}
+					else
+					{
+						//removing pixel only creates leftDiff
+						dynProgResult[i][j] = Math.min(dynProgResult[i-1][j],
+								dynProgResult[i-1][j-1] + energySelections.getFirst());
+					}
+				}
+				else
+				{
+					dynProgResult[i][j] = Math.min(dynProgResult[i-1][j-1] + energySelections.getFirst(),
+										  Math.min(dynProgResult[i-1][j]   + energySelections.getSecond(),
+												   dynProgResult[i-1][j+1] + energySelections.getThird()));
+				}
+			}
+		}
+		return dynProgResult;
+	}
+
 	private static int[][] energyFunctionReg(int rows, int cols, int jStart, int jEnd, int[][] pixels, int[][] prevEnergyMap)
 	{
 		if (jStart < 0) jStart = 0;
@@ -280,16 +351,131 @@ public class SeamCarving
 		return prevEnergyMap;
 	}
 
-	private static int[][] energyFunctionFor(int rows, int cols, int jStart, int jEnd, int[][] pixels, int[][] prevEnergyMap)
+	private static TripletOfInts[][] energyFunctionFor(int rows, int cols, int jStart, int jEnd, 
+			int[][] pixels,				// image	
+			TripletOfInts[][] c_LUR		// "energy" Map
+			)
 	{
-		//TODO: IMPLEMENT. right now - same as energyFunctionReg.
 		if (jStart < 0) jStart = 0;
 		if (jEnd > cols) jEnd = cols;
 
-		for( int i = 0; i < rows; i++ )
-			for( int j = jStart; j < jEnd; j++ )
-				prevEnergyMap[i][j] = ColorsGradient(i, j, rows, cols, pixels);
-		return prevEnergyMap;
+		int leftDiff, topDiff, rightDiff;
+		int CL, CR, CU;
+		
+		for (int i = 0; i < rows; i++)
+		{
+			for (int j = jStart; j < jEnd; j++)
+			{
+				if (i == 0 && ( j == 0 || j == cols - 1)) 	//one of top corners
+				{
+					//removing pixel adds no new edges to the image
+					c_LUR[i][j] = new TripletOfInts(0, 0, 0);
+				}
+				else if (i==0)								//One of top row
+				{
+					//removing pixel only creates topDiff
+					topDiff = forwardCalcTopDiff(pixels, i, j);
+					c_LUR[i][j] = new TripletOfInts(0, topDiff, 0);
+				}
+				else if ( j == 0 || j == cols - 1)			//One of sides
+				{
+					//removing pixel creates rightDiff or leftDiff only
+					if (j == 0)
+					{
+						//removing pixel only creates rightDiff
+						rightDiff = forwardCalcRightDiff(pixels, i, j);
+						c_LUR[i][j] = new TripletOfInts(rightDiff, 0, 0);
+					}
+					else
+					{
+						//removing pixel only creates leftDiff
+						leftDiff = forwardCalcLeftDiff(pixels, i, j);
+						c_LUR[i][j] = new TripletOfInts(0, 0, leftDiff);
+					}
+				}
+				else
+				{
+					
+					//leftDiff
+					leftDiff = forwardCalcLeftDiff(pixels, i, j);
+					
+					//topDiff
+					topDiff = forwardCalcTopDiff(pixels, i, j);
+					
+					//rightDiff
+					rightDiff = forwardCalcRightDiff(pixels, i, j);
+					
+					CL = leftDiff + topDiff;
+					CU = topDiff;
+					CR = rightDiff + topDiff;
+					
+					c_LUR[i][j] = new TripletOfInts(CL, CU, CR);
+				}
+			}
+		}
+		return c_LUR;
+	}
+
+	
+
+	private static int forwardCalcLeftDiff(int[][] pixels, int i, int j) 
+	{
+		int leftDiff;
+		Color c1 = new Color(pixels[i-1][j]);
+		int c1_red = c1.getRed();
+		int c1_green = c1.getGreen();
+		int c1_blue = c1.getBlue();
+		
+		Color c2 = new Color(pixels[i][j-1]);
+		int c2_red = c2.getRed();
+		int c2_green = c2.getGreen();
+		int c2_blue = c2.getBlue();
+		
+		leftDiff = (Math.abs(c1_red - c2_red) +
+					Math.abs(c1_green - c2_green) +
+					Math.abs(c1_blue - c2_blue)) / 3;
+		
+		return leftDiff;
+	}
+	
+	private static int forwardCalcTopDiff(int[][] pixels, int i, int j) 
+	{
+		int topDiff;
+		Color c1 = new Color(pixels[i][j+1]);
+		int c1_red = c1.getRed();
+		int c1_green = c1.getGreen();
+		int c1_blue = c1.getBlue();
+		
+		Color c2 = new Color(pixels[i][j-1]);
+		int c2_red = c2.getRed();
+		int c2_green = c2.getGreen();
+		int c2_blue = c2.getBlue();
+		
+		topDiff = (Math.abs(c1_red - c2_red) +
+					Math.abs(c1_green - c2_green) +
+					Math.abs(c1_blue - c2_blue)) / 3;
+		
+		return topDiff;
+	}
+	
+	private static int forwardCalcRightDiff(int[][] pixels, int i, int j) 
+	{
+		int rightDiff;
+		Color c1 = new Color(pixels[i-1][j]);
+		int c1_red = c1.getRed();
+		int c1_green = c1.getGreen();
+		int c1_blue = c1.getBlue();
+		
+		Color c2 = new Color(pixels[i][j+1]);
+		int c2_red = c2.getRed();
+		int c2_green = c2.getGreen();
+		int c2_blue = c2.getBlue();
+		
+		rightDiff = (Math.abs(c1_red - c2_red) +
+					Math.abs(c1_green - c2_green) +
+					Math.abs(c1_blue - c2_blue)) / 3;
+		
+		return rightDiff;
 	}
 
 	private static int ColorsGradient(int i, int j, int rows, int cols, int[][] pixels)
@@ -451,6 +637,20 @@ public class SeamCarving
 			System.arraycopy(pixels[row], skipIndex + 1, newPixels[row], skipIndex, newNumOfCols - skipIndex);
 		}
 		return newPixels;
+	}
+	
+	private static TripletOfInts[][] carveOutSeam(TripletOfInts[][] c_LUR_energy, int numOfRows, int newNumOfCols, Seam s)
+	{
+		TripletOfInts[][] newEnergy = new TripletOfInts[numOfRows][newNumOfCols];
+		if (s == null) return newEnergy;
+
+		for (int row = 0; row < numOfRows; row++)
+		{
+			int skipIndex = s.cols[row];
+			System.arraycopy(c_LUR_energy[row], 0, newEnergy[row], 0, skipIndex);
+			System.arraycopy(c_LUR_energy[row], skipIndex + 1, newEnergy[row], skipIndex, newNumOfCols - skipIndex);
+		}
+		return newEnergy;
 	}
 
 	private static int[][] carveInSeam(int[][] pixels, int numOfRows, int newNumOfCols, Seam s)

@@ -559,7 +559,7 @@ public class SeamCarving
         for (int m = mStart ; m<mEnd ; m++){
             for (int n = nStart ; n < nEnd ; n++){
                 Pmn = calcFmn(pixels[m][n]) / denomAcc;
-                acc += Pmn*Math.log(Pmn);
+				if (Pmn != 0 ) acc += Pmn*Math.log(Pmn);
             }
         }
         return (-acc);
